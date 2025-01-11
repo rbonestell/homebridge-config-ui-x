@@ -524,11 +524,7 @@ export class PluginsService {
     let npmPluginLabel = pluginAction.name
 
     // Check to see if custom plugin path is using a package.json file
-    if (
-      installPath === this.configService.customPluginPath
-      && !(action === 'uninstall' && this.configService.usePnpm)
-      && await pathExists(resolve(installPath, '../package.json'))
-    ) {
+    if (installPath === this.configService.customPluginPath && await pathExists(resolve(installPath, '../package.json'))) {
       installOptions.push('--save')
     }
 
@@ -541,10 +537,8 @@ export class PluginsService {
     }
 
     if (action === 'install') {
-      if (!this.configService.usePnpm) {
-        // If installing, set --omit=dev to prevent installing devDependencies
-        installOptions.push('--omit=dev')
-      }
+      // If installing, set --omit=dev to prevent installing devDependencies
+      installOptions.push('--omit=dev')
       npmPluginLabel = `${pluginAction.name}@${pluginAction.version}`
     }
 
@@ -640,9 +634,7 @@ export class PluginsService {
 
     // Prepare flags for npm command
     const installOptions: Array<string> = []
-    if (!this.configService.usePnpm) {
-      installOptions.push('--omit=dev')
-    }
+    installOptions.push('--omit=dev')
 
     // Check to see if custom plugin path is using a package.json file
     if (installPath === this.configService.customPluginPath && await pathExists(resolve(installPath, '../package.json'))) {
@@ -1254,8 +1246,8 @@ export class PluginsService {
         this.logger.error('npm install -g npm')
       }
     }
-    // Linux and macOS don't require the full path to npm / pnpm
-    return this.configService.usePnpm ? ['pnpm'] : ['npm']
+    // Linux and macOS don't require the full path to npm
+    return ['npm']
   }
 
   /**
@@ -1489,13 +1481,8 @@ export class PluginsService {
       npm_config_update_notifier: 'false',
       npm_config_prefer_online: 'true',
       npm_config_foreground_scripts: 'true',
+      npm_config_loglevel: 'error',
     })
-
-    if (!this.configService.usePnpm) {
-      Object.assign(env, {
-        npm_config_loglevel: 'error',
-      })
-    }
 
     // Set global prefix for unix based systems
     if (command.includes('-g') && basename(cwd) === 'lib') {
