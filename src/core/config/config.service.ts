@@ -38,7 +38,6 @@ export class ConfigService {
 
   // Server env
   public minimumNodeVersion = '20.18.0'
-  public serviceMode = (process.env.UIX_SERVICE_MODE === '1')
   public runningInDocker = Boolean(process.env.HOMEBRIDGE_CONFIG_UI === '1')
   public runningInSynologyPackage = Boolean(process.env.HOMEBRIDGE_SYNOLOGY_PACKAGE === '1')
   public runningInPackageMode = Boolean(process.env.HOMEBRIDGE_APT_PACKAGE === '1')
@@ -108,12 +107,10 @@ export class ConfigService {
     temp?: string
     tempUnits?: string
     loginWallpaper?: string
-    noFork?: boolean
     linux?: {
       shutdown?: string
       restart?: string
     }
-    standalone?: boolean
     debug?: boolean
     proxyHost?: string
     sessionTimeout?: number
@@ -162,9 +159,7 @@ export class ConfigService {
       this.setConfigForDocker()
     }
 
-    if (this.serviceMode) {
-      this.setConfigForServiceMode()
-    }
+    this.setConfig()
 
     if (!this.ui.port) {
       this.ui.port = 8080
@@ -205,7 +200,6 @@ export class ConfigService {
         packageVersion: this.package.version,
         platform: platform(),
         port: this.ui.port,
-        serviceMode: this.serviceMode,
         setupWizardComplete: this.setupWizardComplete,
       },
       formAuth: Boolean(this.ui.auth !== 'none'),
@@ -298,9 +292,9 @@ export class ConfigService {
   }
 
   /**
-   * Populate the required config when running in "Service Mode"
+   * Populate the required config
    */
-  private setConfigForServiceMode() {
+  private setConfig() {
     this.homebridgeInsecureMode = Boolean(process.env.UIX_INSECURE_MODE === '1')
     this.ui.restart = undefined
     this.ui.sudo = (platform() === 'linux' && !this.runningInDocker && !this.runningInSynologyPackage && !this.runningInPackageMode) || platform() === 'freebsd'
