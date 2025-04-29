@@ -1,13 +1,13 @@
-import { Logger } from "@nestjs/common";
-import { ConfigService } from "../config/config.service";
+import { Injectable, Logger } from "@nestjs/common";
 import { resolve } from "node:path/posix";
 import { KeyChainService } from "./keychain.service";
 import { SecretStore } from "./secret-store";
+import * as configConstants from "../config/config.constants";
 
+@Injectable()
 export class SecretStoreService {
   constructor(
     private readonly keyChainService: KeyChainService,
-    private readonly configService: ConfigService,
     private readonly logger: Logger
   ) {}
 
@@ -83,14 +83,14 @@ export class SecretStoreService {
    */
   private getSecretStore(pluginName?: string) {
     const persistPath = pluginName
-      ? resolve(this.configService.storagePath, "persist")
-      : this.configService.storagePath;
+      ? resolve(configConstants.storagePath, "persist")
+      : configConstants.storagePath;
 
     // Initialize SecretStore instance
     const secretStore = new SecretStore(
       this.keyChainService,
       persistPath,
-      this.configService.homebridgeConfig.bridge.pin,
+      "homebridge",
       pluginName
     );
     return secretStore;

@@ -4,7 +4,7 @@ import * as path from "node:path"; // Added path import
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import { KeyChainFactory } from "./keychain";
 import * as keyChainModule from "./keychain";
-import * as cryptoUtils from "../crypto/crypto-utils.js"; // Import crypto utils
+import * as cryptoUtils from "../crypto/crypto-utils"; // Import crypto utils
 
 // Mock fs and crypto utilities
 vi.mock("node:fs");

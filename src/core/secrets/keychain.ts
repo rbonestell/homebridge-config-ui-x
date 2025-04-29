@@ -11,18 +11,18 @@ const serviceName = "homebridge";
 
 /**
  * Formats the key name, optionally for a given plugin name.
- * @param pluginName The name of the plugin to for which to format the key name.
+ * @param key The name of the plugin for which to format the key name.
  * @returns The formatted key name.
  */
-function formatKeyName(pluginName?: string): string {
-  if (!pluginName) {
+function formatKeyName(key?: string): string {
+  if (!key) {
     return serviceName;
   }
   // Replace any characters that are not alphanumeric, dot, or dash with a dash
   // This is to ensure the key name is safe for use in a file system or command line
-  let sanitizedPluginName = pluginName.replace(/[^a-z0-9]/gi, "-");
+  let sanitizedPluginName = key.replace(/[^a-z0-9]/gi, "-");
   sanitizedPluginName = sanitizedPluginName.replace(/-+/g, "-");
-  return `${serviceName}_${sanitizedPluginName}`;
+  return sanitizedPluginName;
 }
 
 /**
@@ -32,22 +32,22 @@ export interface KeyChain {
   /**
    * Creates and stores a new key.
    * This will overwrite an existing key.
-   * @param pluginName The plugin name to namespace the key.
+   * @param key The plugin name to namespace the key.
    */
-  createKey: (pluginName?: string) => Buffer;
+  createKey: (key?: string) => Buffer;
 
   /**
    * Retrieves a value for a given key.
    * @returns The value if found, otherwise null.
-   * @param pluginName The plugin name to namespace the key.
+   * @param key The plugin name to namespace the key.
    */
-  getKey: (pluginName?: string) => Buffer | null;
+  getKey: (key?: string) => Buffer | null;
 
   /**
    * Deletes a key.
-   * @param pluginName The plugin name to namespace the key.
+   * @param key The plugin name to namespace the key.
    */
-  deleteKey: (pluginName?: string) => void;
+  deleteKey: (key?: string) => void;
 }
 
 interface InternalKeyChainFileFormat {
@@ -71,32 +71,29 @@ class InternalKeyChain implements KeyChain {
   private bridgePin: string;
   private filePath: string;
 
-  constructor(bridgePin: string, storagePath: string) {
-    this.bridgePin = bridgePin;
+  constructor(uniqueID: string, storagePath: string) {
+    this.bridgePin = uniqueID;
     this.filePath = path.resolve(storagePath, "keychain.json.enc");
     this.internalKey = generateAesKey(
-      Buffer.from(bridgePin),
+      Buffer.from(uniqueID),
       Buffer.from(serviceName)
     );
     this.store = this.loadKeyStoreFromDisk();
   }
 
-  createKey(pluginName?: string): Buffer {
+  createKey(key?: string): Buffer {
     const newKey = generateAesKey(
       Buffer.from(this.bridgePin),
-      Buffer.from(formatKeyName(pluginName))
+      Buffer.from(formatKeyName(key))
     );
     const encryptedValue = encryptAes(this.internalKey, newKey);
-    this.store.set(
-      formatKeyName(pluginName),
-      encryptedValue.toString("base64")
-    );
+    this.store.set(formatKeyName(key), encryptedValue.toString("base64"));
     this.saveKeyStoreToDisk();
     return newKey;
   }
 
-  getKey(pluginName?: string): Buffer | null {
-    const keyString = this.store.get(formatKeyName(pluginName)) ?? null;
+  getKey(key?: string): Buffer | null {
+    const keyString = this.store.get(formatKeyName(key)) ?? null;
     if (keyString) {
       const encryptedKey = Buffer.from(keyString, "base64");
       const decryptedKey = decryptAes(this.internalKey, encryptedKey);
@@ -105,8 +102,8 @@ class InternalKeyChain implements KeyChain {
     return null;
   }
 
-  deleteKey(pluginName?: string): void {
-    this.store.delete(formatKeyName(pluginName));
+  deleteKey(key?: string): void {
+    this.store.delete(formatKeyName(key));
     this.saveKeyStoreToDisk();
   }
 
@@ -121,7 +118,7 @@ class InternalKeyChain implements KeyChain {
 
     const secretsFile = readJsonSync(this.filePath, {
       encoding: "utf8",
-    });
+    }) as InternalKeyChainFileFormat;
 
     return new Map(Object.entries(secretsFile.data));
   }
@@ -214,16 +211,16 @@ class SystemKeyChain implements KeyChain {
 
   /**
    * Creates a new randomized AES key and stores it in the OS keychain.
-   * @param pluginName The name of the plugin to which they key belongs, if any.
+   * @param key The name of the plugin to which they key belongs, if any.
    */
-  createKey(pluginName?: string): Buffer {
+  createKey(key?: string): Buffer {
     const newKey = generateAesKey(
       Buffer.from(crypto.randomUUID()),
       Buffer.from(crypto.randomUUID())
     );
     const args = this.getSetCommand(
-      formatKeyName(pluginName),
-      newKey.toString("base64")
+      formatKeyName(key),
+      newKey.toString("base64").replace("/", "\/")
     );
     execFileSync(args.command, args.args, { timeout: 5000 });
     return newKey;
@@ -231,14 +228,16 @@ class SystemKeyChain implements KeyChain {
 
   /**
    * Retrieves a value for a given key from the OS keychain.
-   * @param pluginName The name of the plugin to which the key belongs, if any.
+   * @param key The name of the plugin to which the key belongs, if any.
    * @returns The value if found, otherwise null.
    */
-  getKey(pluginName?: string): Buffer | null {
+  getKey(key?: string): Buffer | null {
     try {
-      const args = this.getGetCommand(formatKeyName(pluginName));
+      const args = this.getGetCommand(formatKeyName(key));
       const keyData = execFileSync(args.command, args.args, { timeout: 5000 });
-      return keyData ?? null;
+      const keyBase54String = keyData?.toString("utf-8")?.trim();
+      const keyBuffer = Buffer.from(keyBase54String, "base64");
+      return keyBuffer ?? null;
     } catch (err: any) {
       if (err.status === 44 || err.status === 1) {
         return null;
@@ -249,10 +248,10 @@ class SystemKeyChain implements KeyChain {
 
   /**
    * Deletes a key-value pair from the OS keychain.
-   * @param pluginName The name of the plugin to which they key belongs, if any.
+   * @param key The name of the plugin to which they key belongs, if any.
    */
-  deleteKey(pluginName?: string): void {
-    const args = this.getDeleteCommand(formatKeyName(pluginName));
+  deleteKey(key?: string): void {
+    const args = this.getDeleteCommand(formatKeyName(key));
     execFileSync(args.command, args.args, { timeout: 5000 });
   }
 
@@ -263,8 +262,8 @@ class SystemKeyChain implements KeyChain {
    * @throws Error if the platform is unsupported.
    */
   private getSetCommand(
-    value: string,
-    keyName: string
+    keyName: string,
+    value: string
   ): { command: string; args: string[]; input?: string } {
     if (this.systemOS === "darwin") {
       return {
@@ -285,7 +284,7 @@ class SystemKeyChain implements KeyChain {
         command: "powershell.exe",
         args: [
           "-Command",
-          `cmdkey /generic:"${keyName}" /user:"${keyName}" /pass:"${value}"`,
+          `cmdkey /generic:"${serviceName}" /user:"${keyName}" /pass:"${value}"`,
         ],
       };
     } else if (this.systemOS === "linux") {

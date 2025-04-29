@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { KeyChain } from "./keychain";
-import { decryptAes, encryptAes } from "../crypto/crypto-utils.js";
+import { decryptAes, encryptAes } from "../crypto/crypto-utils";
 import { readJSONSync, writeJsonSync } from "fs-extra";
 
 export interface SecretsFileFormat {
@@ -13,7 +13,7 @@ export interface SecretsFileFormat {
 export class SecretStore {
   public readonly keychain: KeyChain;
   private filePath: string;
-  private secrets: Record<string, string>;
+  private secrets: Record<string, string> = {};
   private baseKey: Buffer;
 
   constructor(
@@ -23,7 +23,7 @@ export class SecretStore {
     pluginName?: string
   ) {
     this.keychain = keychain;
-    this.baseKey = this.keychain.getKey(uniqueID);
+    this.baseKey = this.getOrCreateSecretEncryptionKey(pluginName);
     this.setFilePath(storagePath, pluginName);
     this.loadSecretsFromDisk();
   }
@@ -122,5 +122,17 @@ export class SecretStore {
     } catch (e: any) {
       console.error(`Failed to save secrets: ${e.message}`);
     }
+  }
+
+  /**
+   * Get or create a secret encryption key using KeyChainFactory
+   * @param uniqueID Installation-unique identifier which to use in key derivation
+   * @returns A Buffer containing the secret encryption key
+   */
+  private getOrCreateSecretEncryptionKey(pluginName?: string): Buffer {
+    const key =
+      this.keychain.getKey(pluginName || "homebridge") ??
+      this.keychain.createKey(pluginName || "homebridge");
+    return key;
   }
 }
