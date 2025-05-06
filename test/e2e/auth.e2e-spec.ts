@@ -1,215 +1,219 @@
-import type { NestFastifyApplication } from '@nestjs/platform-fastify'
-import type { TestingModule } from '@nestjs/testing'
+import type { NestFastifyApplication } from "@nestjs/platform-fastify";
+import type { TestingModule } from "@nestjs/testing";
 
-import { resolve } from 'node:path'
-import process from 'node:process'
+import { resolve } from "node:path";
+import process from "node:process";
 
-import { ValidationPipe } from '@nestjs/common'
-import { FastifyAdapter } from '@nestjs/platform-fastify'
-import { Test } from '@nestjs/testing'
-import { copy, pathExists, remove } from 'fs-extra'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { ValidationPipe } from "@nestjs/common";
+import { FastifyAdapter } from "@nestjs/platform-fastify";
+import { Test } from "@nestjs/testing";
+import { copy, pathExists, remove } from "fs-extra";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
 
-import { AuthModule } from '../../src/core/auth/auth.module'
-import { AuthService } from '../../src/core/auth/auth.service'
-import { ConfigService } from '../../src/core/config/config.service'
+import { AuthModule } from "../../src/core/auth/auth.module";
+import { AuthService } from "../../src/core/auth/auth.service";
+import { ConfigService } from "../../src/core/config/config.service";
+import { setHomebridgeTestEnvValues } from "./utils/test-setup";
+import {
+  getAuthFilePath,
+  getUIXSecretsFilePath,
+} from "src/core/config/config.vars";
 
-describe('AuthController (e2e)', () => {
-  let app: NestFastifyApplication
+describe("AuthController (e2e)", () => {
+  let app: NestFastifyApplication;
 
-  let authService: AuthService
-  let configService: ConfigService
-
-  let authFilePath: string
-  let secretsFilePath: string
+  let authService: AuthService;
+  let configService: ConfigService;
 
   beforeAll(async () => {
-    process.env.UIX_BASE_PATH = resolve(__dirname, '../../')
-    process.env.UIX_STORAGE_PATH = resolve(__dirname, '../', '.homebridge')
-    process.env.UIX_CONFIG_PATH = resolve(process.env.UIX_STORAGE_PATH, 'config.json')
-
-    authFilePath = resolve(process.env.UIX_STORAGE_PATH, 'auth.json')
-    secretsFilePath = resolve(process.env.UIX_STORAGE_PATH, '.uix-secrets')
-
-    // Setup test config
-    await copy(resolve(__dirname, '../mocks', 'config.json'), process.env.UIX_CONFIG_PATH)
+    await setHomebridgeTestEnvValues();
 
     // Remove any existing auth / secret files
-    await remove(authFilePath)
-    await remove(secretsFilePath)
+    await remove(getAuthFilePath());
+    await remove(getUIXSecretsFilePath());
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AuthModule],
-    }).compile()
+    }).compile();
 
-    app = moduleFixture.createNestApplication<NestFastifyApplication>(new FastifyAdapter())
+    app = moduleFixture.createNestApplication<NestFastifyApplication>(
+      new FastifyAdapter()
+    );
 
-    app.useGlobalPipes(new ValidationPipe({
-      whitelist: true,
-      skipMissingProperties: true,
-    }))
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        skipMissingProperties: true,
+      })
+    );
 
-    await app.init()
-    await app.getHttpAdapter().getInstance().ready()
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
 
-    authService = app.get(AuthService)
-    configService = app.get(ConfigService)
-  })
+    authService = app.get(AuthService);
+    configService = app.get(ConfigService);
+  });
 
   beforeEach(async () => {
     // Setup test auth file
-    await copy(resolve(__dirname, '../mocks', 'auth.json'), authFilePath)
-    configService.setupWizardComplete = true
-  })
+    await copy(resolve(__dirname, "../mocks", "auth.json"), getAuthFilePath());
+    configService.setupWizardComplete = true;
+  });
 
   afterEach(async () => {
     // Restore auth mode after each test
-    const thisConfigService: ConfigService = app.get(ConfigService)
-    thisConfigService.ui.auth = 'form'
-  })
+    const thisConfigService: ConfigService = app.get(ConfigService);
+    thisConfigService.ui.auth = "form";
+  });
 
-  it('should .uix-secrets on launch', async () => {
-    expect(await pathExists(secretsFilePath)).toBe(true)
-  })
-
-  it('should flag first run setup wizard as not complete if authfile not created', async () => {
+  it("should flag first run setup wizard as not complete if authfile not created", async () => {
     // Remove test auth file
-    await remove(authFilePath)
-    await authService.checkAuthFile()
-    expect(configService.setupWizardComplete).toBe(false)
-  })
+    await remove(getAuthFilePath());
+    await authService.checkAuthFile();
+    expect(configService.setupWizardComplete).toBe(false);
+  });
 
-  it('should flag first run setup wizard as complete if authfile is created', async () => {
+  it("should flag first run setup wizard as complete if authfile is created", async () => {
     // Test authfile created in beforeEach hook
-    await authService.checkAuthFile()
-    expect(configService.setupWizardComplete).toBe(true)
-  })
+    await authService.checkAuthFile();
+    expect(configService.setupWizardComplete).toBe(true);
+  });
 
-  it('POST /auth/login (valid login)', async () => {
+  it("POST /auth/login (valid login)", async () => {
     const res = await app.inject({
-      method: 'POST',
-      path: '/auth/login',
+      method: "POST",
+      path: "/auth/login",
       payload: {
-        username: 'admin',
-        password: 'admin',
+        username: "admin",
+        password: "admin",
       },
-    })
+    });
 
-    expect(res.statusCode).toBe(201)
-    expect(res.json()).toHaveProperty('access_token')
-  })
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toHaveProperty("access_token");
+  });
 
-  it('POST /auth/login (invalid login)', async () => {
+  it("POST /auth/login (invalid login)", async () => {
     const res = await app.inject({
-      method: 'POST',
-      path: '/auth/login',
+      method: "POST",
+      path: "/auth/login",
       payload: {
-        username: 'admin',
-        password: 'not-the-real-password',
+        username: "admin",
+        password: "not-the-real-password",
       },
-    })
+    });
 
-    expect(res.statusCode).toBe(403)
-    expect(res.json()).not.toHaveProperty('access_token')
-  })
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).not.toHaveProperty("access_token");
+  });
 
-  it('POST /auth/login (missing password)', async () => {
+  it("POST /auth/login (missing password)", async () => {
     const res = await app.inject({
-      method: 'POST',
-      path: '/auth/login',
+      method: "POST",
+      path: "/auth/login",
       payload: {
-        username: 'admin',
+        username: "admin",
       },
-    })
+    });
 
-    expect(res.statusCode).toBe(400)
-    expect(res.body).toContain('password should not be null or undefined')
-    expect(res.json()).not.toHaveProperty('access_token')
-  })
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain("password should not be null or undefined");
+    expect(res.json()).not.toHaveProperty("access_token");
+  });
 
-  it('POST /auth/login (missing username)', async () => {
+  it("POST /auth/login (missing username)", async () => {
     const res = await app.inject({
-      method: 'POST',
-      path: '/auth/login',
+      method: "POST",
+      path: "/auth/login",
       payload: {
-        password: 'admin',
+        password: "admin",
       },
-    })
+    });
 
-    expect(res.statusCode).toBe(400)
-    expect(res.body).toContain('username should not be null or undefined')
-    expect(res.json()).not.toHaveProperty('access_token')
-  })
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain("username should not be null or undefined");
+    expect(res.json()).not.toHaveProperty("access_token");
+  });
 
-  it('POST /auth/noauth (auth enabled)', async () => {
+  it("POST /auth/noauth (auth enabled)", async () => {
     const res = await app.inject({
-      method: 'POST',
-      path: '/auth/noauth',
-    })
+      method: "POST",
+      path: "/auth/noauth",
+    });
 
-    expect(res.statusCode).toBe(401)
-    expect(res.json()).not.toHaveProperty('access_token')
-  })
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).not.toHaveProperty("access_token");
+  });
 
-  it('POST /auth/noauth (auth disabled)', async () => {
+  it("POST /auth/noauth (auth disabled)", async () => {
     // Set auth mode to none
-    const thisConfigService: ConfigService = app.get(ConfigService)
-    thisConfigService.ui.auth = 'none'
+    const thisConfigService: ConfigService = app.get(ConfigService);
+    thisConfigService.ui.auth = "none";
 
     const res = await app.inject({
-      method: 'POST',
-      path: '/auth/noauth',
-    })
+      method: "POST",
+      path: "/auth/noauth",
+    });
 
-    expect(res.statusCode).toBe(201)
-    expect(res.json()).toHaveProperty('access_token')
-  })
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toHaveProperty("access_token");
+  });
 
-  it('GET /auth/check (valid token)', async () => {
-    const accessToken = (await app.inject({
-      method: 'POST',
-      path: '/auth/login',
-      payload: {
-        username: 'admin',
-        password: 'admin',
-      },
-    })).json().access_token
+  it("GET /auth/check (valid token)", async () => {
+    const accessToken = (
+      await app.inject({
+        method: "POST",
+        path: "/auth/login",
+        payload: {
+          username: "admin",
+          password: "admin",
+        },
+      })
+    ).json().access_token;
 
     const res = await app.inject({
-      method: 'GET',
-      path: '/auth/check',
+      method: "GET",
+      path: "/auth/check",
       headers: {
         authorization: `bearer ${accessToken}`,
       },
-    })
+    });
 
-    expect(res.statusCode).toBe(200)
-    expect(res.json().status).toBe('OK')
-  })
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("OK");
+  });
 
-  it('GET /auth/check (invalid token)', async () => {
+  it("GET /auth/check (invalid token)", async () => {
     const res = await app.inject({
-      method: 'GET',
-      path: '/auth/check',
+      method: "GET",
+      path: "/auth/check",
       headers: {
-        authorization: 'bearer xxxxxxxx',
+        authorization: "bearer xxxxxxxx",
       },
-    })
+    });
 
-    expect(res.statusCode).toBe(401)
-  })
+    expect(res.statusCode).toBe(401);
+  });
 
-  it('GET /auth/settings', async () => {
+  it("GET /auth/settings", async () => {
     const res = await app.inject({
-      method: 'GET',
-      path: '/auth/settings',
-    })
+      method: "GET",
+      path: "/auth/settings",
+    });
 
-    expect(res.statusCode).toBe(200)
-    expect(res.json().env.homebridgeInstanceName).toBe('Homebridge Test')
-  })
+    expect(res.statusCode).toBe(200);
+    expect(res.json().env.homebridgeInstanceName).toBe("Homebridge Test");
+  });
 
   afterAll(async () => {
-    await app.close()
-  })
-})
+    await app.close();
+  });
+});

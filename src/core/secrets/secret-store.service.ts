@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { resolve } from "node:path/posix";
 import { KeyChainService } from "./keychain.service";
 import { SecretStore } from "./secret-store";
-import * as configConstants from "../config/config.constants";
+import * as configConstants from "../config/config.vars";
 
 @Injectable()
 export class SecretStoreService {
@@ -83,8 +83,8 @@ export class SecretStoreService {
    */
   private getSecretStore(pluginName?: string) {
     const persistPath = pluginName
-      ? resolve(configConstants.storagePath, "persist")
-      : configConstants.storagePath;
+      ? resolve(configConstants.getStoragePath(), "persist")
+      : configConstants.getStoragePath();
 
     // Initialize SecretStore instance
     const secretStore = new SecretStore(

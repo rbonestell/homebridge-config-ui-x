@@ -73,7 +73,7 @@ class InternalKeyChain implements KeyChain {
 
   constructor(uniqueID: string, storagePath: string) {
     this.bridgePin = uniqueID;
-    this.filePath = path.resolve(storagePath, "keychain.json.enc");
+    this.filePath = path.resolve(storagePath, "keychain.json");
     this.internalKey = generateAesKey(
       Buffer.from(uniqueID),
       Buffer.from(serviceName)

@@ -18,7 +18,7 @@ afterEach(() => {
   vi.clearAllMocks();
   try {
     // Use the correct path from InternalKeyChain implementation
-    fs.unlinkSync(path.join(persistPath, "keychain.json.enc"));
+    fs.unlinkSync(path.join(persistPath, "keychain.json"));
   } catch {}
 });
 
@@ -166,7 +166,7 @@ if (InternalKeyChain) {
       // Create a new instance to force reload from disk
       const kc2 = new InternalKeyChain(uniqueID, persistPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(
-        path.join(persistPath, "keychain.json.enc"),
+        path.join(persistPath, "keychain.json"),
         "utf8"
       );
       expect(cryptoUtils.generateAesKey).toHaveBeenCalledTimes(1); // Only for internal key

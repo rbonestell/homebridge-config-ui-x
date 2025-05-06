@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { KeyChain, KeyChainFactory } from "./keychain";
-import * as configConstants from "../config/config.constants";
+import * as configConstants from "../config/config.vars";
 
 @Injectable()
 export class KeyChainService implements KeyChain {
@@ -11,7 +11,7 @@ export class KeyChainService implements KeyChain {
     // Uses bridge pin for deterministic unique salt if InternalKeyChain is used
     this.keychain = KeyChainFactory.getKeyChain(
       "homebridge",
-      configConstants.storagePath
+      configConstants.getStoragePath()
     );
   }
 

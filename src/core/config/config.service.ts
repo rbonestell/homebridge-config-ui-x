@@ -19,7 +19,7 @@ import {
 import { isEqual } from "lodash";
 import { satisfies } from "semver";
 import { SecretStoreService } from "../secrets/secret-store.service";
-import * as configConstants from "./config.constants";
+import * as configConstants from "./config.vars";
 
 @Injectable()
 export class ConfigService {
@@ -29,15 +29,15 @@ export class ConfigService {
    * Legacy secrets storage path, for backwards compatibility
    * @deprecated Secrets should be stored using SecretStoreService
    */
-  public secretPath = configConstants.secretPath;
-  public configPath = configConstants.configPath;
-  public storagePath = configConstants.storagePath;
-  public customPluginPath = configConstants.customPluginPath;
-  public strictPluginResolution = configConstants.strictPluginResolution;
-  public authPath = configConstants.authPath;
-  public accessoryLayoutPath = configConstants.accessoryLayoutPath;
-  public configBackupPath = configConstants.configBackupPath;
-  public instanceBackupPath = configConstants.instanceBackupPath;
+  public secretPath = configConstants.getUIXSecretsFilePath();
+  public configPath = configConstants.getConfigPath();
+  public storagePath = configConstants.getStoragePath();
+  public customPluginPath = configConstants.getCustomPluginPath();
+  public strictPluginResolution = configConstants.getStrictPluginResolution();
+  public authPath = configConstants.getAuthFilePath();
+  public accessoryLayoutPath = configConstants.getAccessoryLayoutPath();
+  public configBackupPath = configConstants.getConfigBackupPath();
+  public instanceBackupPath = configConstants.getInstanceBackupPath();
   public homebridgeInsecureMode = configConstants.homebridgeInsecureMode;
 
   // Homebridge env
@@ -78,7 +78,10 @@ export class ConfigService {
   public runningOnRaspberryPi = false;
 
   // Docker settings
-  public startupScript = resolve(configConstants.storagePath, "startup.sh");
+  public startupScript = resolve(
+    configConstants.getStoragePath(),
+    "startup.sh"
+  );
   public dockerOfflineUpdate =
     this.runningInDocker &&
     satisfies(process.env.CONFIG_UI_VERSION, ">=4.6.2 <=4.44.1", {
@@ -95,7 +98,7 @@ export class ConfigService {
 
   // Custom wallpaper
   public customWallpaperPath = resolve(
-    configConstants.storagePath,
+    configConstants.getStoragePath(),
     "ui-wallpaper.jpg"
   );
   public customWallpaperHash: string;
@@ -156,7 +159,7 @@ export class ConfigService {
   public instanceId: string;
 
   constructor(private readonly secretStoreService: SecretStoreService) {
-    const homebridgeConfig = readJSONSync(configConstants.configPath);
+    const homebridgeConfig = readJSONSync(configConstants.getConfigPath());
     this.parseConfig(homebridgeConfig);
     this.checkIfRunningOnRaspberryPi();
   }
@@ -201,7 +204,7 @@ export class ConfigService {
       this.instanceBackupPath = this.ui.scheduledBackupPath;
     } else {
       this.instanceBackupPath = resolve(
-        configConstants.storagePath,
+        configConstants.getStoragePath(),
         "backups/instance-backups"
       );
     }
@@ -248,7 +251,7 @@ export class ConfigService {
       ...toReturn,
       env: {
         ...toReturn.env,
-        enableAccessories: this.homebridgeInsecureMode,
+        enableAccessories: this.homebridgeInsecureMode(),
         enableTerminalAccess: this.enableTerminalAccess,
         nodeVersion: process.version,
         recommendChildBridges: this.recommendChildBridges,
@@ -312,9 +315,6 @@ export class ConfigService {
     // Forced config
     this.ui.restart =
       "killall -15 homebridge; sleep 5.1; killall -9 homebridge; kill -9 $(pidof homebridge-config-ui-x);";
-    this.homebridgeInsecureMode = Boolean(
-      process.env.HOMEBRIDGE_INSECURE === "1"
-    );
     this.ui.sudo = false;
     this.ui.log = {
       method: "file",
@@ -341,9 +341,6 @@ export class ConfigService {
    * Populate the required config
    */
   private setConfig() {
-    this.homebridgeInsecureMode = Boolean(
-      process.env.UIX_INSECURE_MODE === "1"
-    );
     this.ui.restart = undefined;
     this.ui.sudo =
       (platform() === "linux" &&
@@ -353,7 +350,7 @@ export class ConfigService {
       platform() === "freebsd";
     this.ui.log = {
       method: "native",
-      path: resolve(configConstants.storagePath, "homebridge.log"),
+      path: resolve(configConstants.getStoragePath(), "homebridge.log"),
     };
   }
 
@@ -381,14 +378,14 @@ export class ConfigService {
    * and migrate to the new SecretStoreService
    */
   private migrateSecrets(): void {
-    if (pathExistsSync(configConstants.secretPath)) {
-      const secrets = readJsonSync(configConstants.secretPath);
+    if (pathExistsSync(configConstants.getUIXSecretsFilePath())) {
+      const secrets = readJsonSync(configConstants.getUIXSecretsFilePath());
       if (secrets?.secretKey) {
         this.setSecretToken(secrets.secretKey);
       }
 
       // Delete deprecated secrets file
-      removeSync(configConstants.secretPath);
+      removeSync(configConstants.getUIXSecretsFilePath());
     }
   }
 

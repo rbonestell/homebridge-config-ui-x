@@ -87,11 +87,11 @@ export class SecretStore {
       // Store plugin-specific secrets
       this.filePath = path.resolve(
         storagePath,
-        `${sanitizedPluginName}-secrets.json.enc`
+        `${sanitizedPluginName}-secrets.json`
       );
     } else {
       // Store top-level homebridge secrets
-      this.filePath = path.resolve(storagePath, `secrets.json.enc`);
+      this.filePath = path.resolve(storagePath, `secrets.json`);
     }
   }
 
