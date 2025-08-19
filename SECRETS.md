@@ -1,73 +1,251 @@
-To support storing sensitive configuration values as secrets, the UI project should be updated as follows:
+# Secrets Management
 
-### Secrets Implementation
+Homebridge UI provides a secure secrets management system for storing sensitive configuration values like API keys, passwords, and tokens. This system ensures that sensitive data is encrypted and stored separately from the main `config.json` file.
 
-#### 1. **Schema/Metadata Support for Secrets**
+## Overview
 
-- **Update plugin config schemas** to allow fields to be marked as `"secret": true` (or similar).
-- **UI config forms** (especially JSON schema forms) must detect this property.
+The secrets management system consists of:
 
-#### 2. **UI Rendering for Secret Fields**
+- **Encrypted Storage**: Secrets are stored in encrypted JSON files using AES-256-GCM encryption
+- **Keychain Integration**: Encryption keys are stored securely in the system keychain (macOS/Windows) or filesystem (Linux)
+- **API Endpoints**: RESTful API for managing secrets programmatically
+- **Plugin Integration**: Plugins can mark configuration fields as secrets for automatic handling
 
-- Render fields marked as secret as password fields (masked input).
-- Optionally, provide a "show/hide" toggle for user convenience.
+## Architecture
 
-#### 3. **API Integration**
+### Storage Layer
 
-- **Do not store secret values in the config.json**. Instead, when a secret field is set/changed, call the backend `/api/secrets` endpoint (or similar) to store/retrieve the value.
-- When loading config, fetch secret values from the backend and populate the form fields as needed.
+Secrets are stored in two locations depending on scope:
 
-#### 4. **Frontend Service Layer**
+- **Homebridge-level secrets**: `~/.homebridge/.uix-secrets` (legacy) or `~/.homebridge/persist/homebridge-secrets.json`
+- **Plugin-specific secrets**: `~/.homebridge/persist/{plugin-name}-secrets.json`
 
-- Implement a service (e.g., `SecretService`) in the UI to interact with the backend secret API:
-  - `setSecret(pluginName, key, value)`
-  - `getSecret(pluginName, key)`
-  - `deleteSecret(pluginName, key)`
+### Encryption
 
-#### 5. **Config Save/Load Logic**
+- **Algorithm**: AES-256-GCM with authenticated encryption
+- **Key Management**: 32-byte keys stored in system keychain or secure filesystem location
+- **Format**: Encrypted JSON with metadata including algorithm version and format
 
-- When saving plugin config, strip out secret fields and store them via the secret API.
-- When loading plugin config, fetch secret values and inject them into the form for editing.
+### Components
 
-#### 6. **User Feedback**
+```
+SecretStoreService
+├── SecretStore (core encryption/decryption)
+├── KeyChainService (key management)
+└── File I/O with atomic operations
+```
 
-- Indicate to users that a field is securely stored and not in config.json.
-- Optionally, show a placeholder or "value is set" indicator for secrets.
+## API Reference
 
----
+### Endpoints
 
-### Example Changes by Area
+#### Store a Secret
+```http
+POST /api/secrets/:secretName
+POST /api/secrets/:pluginName/:secretName
+Content-Type: application/json
 
-#### **A. JSON Schema Form Renderer**
+{
+  "value": "your-secret-value"
+}
+```
 
-- Detect `"secret": true` in schema and render as `<input type="password">`.
-- On change, call the secret API instead of updating config.json.
+#### Retrieve a Secret
+```http
+GET /api/secrets/:secretName
+GET /api/secrets/:pluginName/:secretName
+```
 
-#### **B. Plugin Config Editor**
+Response:
+```json
+{
+  "success": true,
+  "value": "your-secret-value"
+}
+```
 
-- When loading config, fetch secret values for secret fields.
-- When saving config, use the secret API for secret fields.
+#### Delete a Secret
+```http
+DELETE /api/secrets/:secretName
+DELETE /api/secrets/:pluginName/:secretName
+```
 
-#### **C. API Service**
+### Authentication
 
-- Add methods to call backend secret endpoints (set/get/delete).
+All endpoints require admin authentication via JWT token or session authentication.
 
-#### **D. Documentation**
+## Plugin Integration
 
-- Document for plugin developers how to mark fields as secrets in their schema.
+### Marking Fields as Secrets
 
----
+Plugin developers can mark configuration fields as secrets in their `config.schema.json`:
 
-### Summary Table
+```json
+{
+  "type": "object",
+  "properties": {
+    "apiKey": {
+      "type": "string",
+      "title": "API Key",
+      "secret": true,
+      "description": "Your service API key"
+    },
+    "password": {
+      "type": "string",
+      "title": "Password",
+      "secret": true,
+      "description": "Account password"
+    }
+  }
+}
+```
 
-| Area                 | What to Update                                   |
-| -------------------- | ------------------------------------------------ |
-| JSON Schema Form     | Render secret fields as password, use secret API |
-| Plugin Config Editor | Fetch/set secrets via API, not config.json       |
-| API Service          | Add methods for backend secret endpoints         |
-| Plugin Schema/Docs   | Document `"secret": true` for plugin developers  |
-| User Feedback        | Indicate secret fields are securely stored       |
+### Programmatic Access
 
----
+Plugins can access secrets using the Homebridge Config UI X API:
 
-**If you want code examples for a specific UI file or component, please specify which one.**
+```javascript
+// In your plugin
+const secretValue = await this.api.getSecret('my-plugin', 'apiKey');
+await this.api.setSecret('my-plugin', 'apiKey', 'new-value');
+await this.api.deleteSecret('my-plugin', 'apiKey');
+```
+
+## Security Features
+
+### Encryption Details
+
+- **Algorithm**: AES-256-GCM (Galois/Counter Mode)
+- **Key Size**: 256-bit (32 bytes)
+- **IV/Nonce**: 96-bit random value per encryption
+- **Authentication**: Built-in authentication tag prevents tampering
+
+### Key Management
+
+- **macOS**: Keychain Services API
+- **Windows**: Windows Credential Manager
+- **Linux**: Encrypted file with restricted permissions (0600)
+
+### Security Considerations
+
+- Keys are never stored in plain text in config files
+- Secrets are encrypted both at rest and in transit
+- Atomic file operations prevent corruption during writes
+- Authentication required for all secret operations
+- Secrets are automatically excluded from config backups
+
+## File Formats
+
+### Encrypted Secret File Format
+
+```json
+{
+  "version": "1.0.0",
+  "algorithm": "aes-256-gcm",
+  "secrets": {
+    "secretName": {
+      "iv": "base64-encoded-iv",
+      "data": "base64-encoded-encrypted-data",
+      "authTag": "base64-encoded-auth-tag"
+    }
+  }
+}
+```
+
+### Legacy Format Support
+
+The system maintains backward compatibility with the legacy `.uix-secrets` format while automatically migrating to the new JSON format.
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run secrets-specific tests
+npm test test/e2e/secrets.e2e-spec.ts
+```
+
+### Environment Variables
+
+- `UIX_STORAGE_PATH`: Override default storage location
+- `UIX_INSECURE_MODE`: Disable encryption for testing (not recommended)
+
+### File Locations
+
+- **Storage**: `$UIX_STORAGE_PATH/persist/`
+- **Keys**: System keychain or `$UIX_STORAGE_PATH/.uix-keys` (Linux)
+- **Legacy**: `$UIX_STORAGE_PATH/.uix-secrets`
+
+## Migration
+
+### From Legacy Format
+
+The system automatically migrates from the legacy `.uix-secrets` format to the new JSON format on first access. The migration:
+
+1. Reads existing encrypted secrets
+2. Converts to new JSON format
+3. Preserves encryption and key material
+4. Maintains backward compatibility
+
+### Between Versions
+
+Secret format versions are tracked in the JSON metadata. Future format changes will include automatic migration paths.
+
+## Troubleshooting
+
+### Common Issues
+
+**Permission Errors**
+```bash
+# Ensure proper permissions on storage directory
+chmod 700 ~/.homebridge/persist/
+```
+
+**Keychain Access Issues (macOS)**
+```bash
+# Reset keychain if needed
+security delete-generic-password -s "Homebridge UI"
+```
+
+**Missing Secrets**
+- Check file permissions in persist directory
+- Verify keychain access for encryption keys
+- Check logs for decryption errors
+
+### Debug Logging
+
+Enable debug logging for secrets:
+
+```bash
+DEBUG=SecretStore* homebridge
+```
+
+## Best Practices
+
+### For Plugin Developers
+
+1. **Mark sensitive fields**: Always mark API keys, passwords, and tokens as secrets
+2. **Validate secret values**: Check for empty or invalid secret values
+3. **Provide clear descriptions**: Help users understand what each secret is for
+4. **Handle missing secrets**: Gracefully handle cases where secrets are not set
+
+### For Users
+
+1. **Regular backups**: While secrets are excluded from config backups, ensure keychain/key files are backed up
+2. **Secure access**: Protect access to the Homebridge UI admin interface
+3. **Key rotation**: Periodically update API keys and passwords stored as secrets
+4. **Monitor logs**: Check logs for any secret-related errors or warnings
+
+## Contributing
+
+When contributing to the secrets management system:
+
+1. **Security first**: All changes must maintain or improve security
+2. **Backward compatibility**: Ensure existing secrets continue to work
+3. **Test coverage**: Add tests for new functionality
+4. **Documentation**: Update this documentation for any API changes
+
+See the main [README.md](README.md) for general contribution guidelines.
