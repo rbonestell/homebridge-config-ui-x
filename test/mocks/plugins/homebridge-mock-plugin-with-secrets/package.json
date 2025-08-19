@@ -1,0 +1,13 @@
+{
+  "name": "homebridge-mock-plugin-with-secrets",
+  "version": "1.0.0",
+  "description": "Mock plugin with secret fields for testing",
+  "main": "index.js",
+  "engines": {
+    "homebridge": ">=1.0.0",
+    "node": ">=14.18.1"
+  },
+  "keywords": [
+    "homebridge-plugin"
+  ]
+}

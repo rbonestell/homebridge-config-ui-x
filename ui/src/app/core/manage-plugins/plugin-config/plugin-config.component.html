@@ -65,6 +65,7 @@
             <app-schema-form
               [configSchema]="schema"
               [(data)]="block.config"
+              [pluginName]="plugin.name"
               (isValid)="onIsValid($event, i)"
             ></app-schema-form>
           </div>
@@ -80,6 +81,7 @@
       <app-schema-form
         [configSchema]="schema"
         [(data)]="pluginConfig[0].config"
+        [pluginName]="plugin.name"
         (isValid)="onIsValid($event, 0)"
       ></app-schema-form>
       @if (plugin.name==='homebridge-deconz') {

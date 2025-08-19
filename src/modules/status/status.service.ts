@@ -372,12 +372,12 @@ export class StatusService {
     }
 
     const defaultInterfaceName = await networkInterfaceDefault();
-    // See https://github.com/sebhildebrandt/systeminformation/issues/775#issuecomment-1741836906
-    // @ts-expect-error - These ts-ignore should be able to be removed in the next major release of 'systeminformation' (v6)
+    let interfaces = await networkInterfaces();
+    if (!Array.isArray(interfaces)) {
+      interfaces = [interfaces];
+    }
     const defaultInterface = defaultInterfaceName
-      ? (await networkInterfaces()).find(
-          (x) => x.iface === defaultInterfaceName
-        )
+      ? interfaces.find((x) => x.iface === defaultInterfaceName)
       : undefined;
 
     if (defaultInterface) {

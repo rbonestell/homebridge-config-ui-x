@@ -22,6 +22,7 @@ import { RestartChildBridgesComponent } from '@/app/core/components/restart-chil
 import { RestartHomebridgeComponent } from '@/app/core/components/restart-homebridge/restart-homebridge.component'
 import { SchemaFormComponent } from '@/app/core/components/schema-form/schema-form.component'
 import { PluginsMarkdownDirective } from '@/app/core/directives/plugins.markdown.directive'
+import { SecretsService } from '@/app/core/secrets.service'
 import { HomebridgeDeconzComponent } from '@/app/core/manage-plugins/custom-plugins/homebridge-deconz/homebridge-deconz.component'
 import { HomebridgeHueComponent } from '@/app/core/manage-plugins/custom-plugins/homebridge-hue/homebridge-hue.component'
 import { InterpolateMdPipe } from '@/app/core/manage-plugins/interpolate-md.pipe'
@@ -73,6 +74,7 @@ export class PluginConfigComponent implements OnInit {
   private $api = inject(ApiService)
   private $plugin = inject(ManagePluginsService)
   private $modal = inject(NgbModal)
+  private $secrets = inject(SecretsService)
   private $settings = inject(SettingsService)
   private $toastr = inject(ToastrService)
   private $translate = inject(TranslateService)
@@ -91,6 +93,7 @@ export class PluginConfigComponent implements OnInit {
   public formBlocksValid: { [key: number]: boolean } = {}
   public formIsValid = true
   public strictValidation = false
+  private secretFields: Set<string> = new Set()
 
   constructor() {}
 
@@ -98,6 +101,7 @@ export class PluginConfigComponent implements OnInit {
     this.pluginAlias = this.schema.pluginAlias
     this.pluginType = this.schema.pluginType
     this.strictValidation = this.schema.strictValidation
+    this.identifySecretFields()
     this.loadPluginConfig()
   }
 
@@ -133,7 +137,8 @@ export class PluginConfigComponent implements OnInit {
 
   async save() {
     this.saveInProgress = true
-    const configBlocks = this.pluginConfig.map(x => x.config)
+    // Clean config blocks by removing secret placeholders
+    const configBlocks = this.pluginConfig.map(x => this.cleanConfigForSave(x.config))
 
     try {
       const newConfig = await firstValueFrom(this.$api.post(`/config-editor/plugin/${encodeURIComponent(this.plugin.name)}`, configBlocks))
@@ -256,5 +261,75 @@ export class PluginConfigComponent implements OnInit {
   onIsValid($event: boolean, index: number) {
     this.formBlocksValid[index] = $event
     this.formIsValid = Object.values(this.formBlocksValid).every(x => x)
+  }
+
+  /**
+   * Identify secret fields from the schema
+   */
+  private identifySecretFields(): void {
+    this.secretFields.clear()
+    if (this.schema?.schema?.properties) {
+      this.findSecretFields(this.schema.schema.properties, '')
+    }
+  }
+
+  /**
+   * Recursively find fields marked as secret in the schema
+   */
+  private findSecretFields(properties: any, prefix: string): void {
+    for (const [key, property] of Object.entries(properties)) {
+      const fieldPath = prefix ? `${prefix}.${key}` : key
+      
+      if ((property as any)?.secret === true) {
+        this.secretFields.add(fieldPath)
+      }
+
+      // Recursively check nested objects
+      if ((property as any)?.properties) {
+        this.findSecretFields((property as any).properties, fieldPath)
+      }
+
+      // Check array items
+      if ((property as any)?.items?.properties) {
+        this.findSecretFields((property as any).items.properties, `${fieldPath}[]`)
+      }
+    }
+  }
+
+  /**
+   * Clean config for save by removing secret placeholders
+   */
+  private cleanConfigForSave(config: any): any {
+    const cleanedConfig = JSON.parse(JSON.stringify(config))
+    
+    for (const fieldPath of this.secretFields) {
+      const value = this.getNestedValue(cleanedConfig, fieldPath)
+      
+      // Remove secret placeholder values from config
+      if (value === '***SECRET_STORED***') {
+        this.deleteNestedValue(cleanedConfig, fieldPath)
+      }
+    }
+    
+    return cleanedConfig
+  }
+
+  /**
+   * Get nested value from object using dot notation
+   */
+  private getNestedValue(obj: any, path: string): any {
+    return path.split('.').reduce((current, key) => current?.[key], obj)
+  }
+
+  /**
+   * Delete nested value from object using dot notation
+   */
+  private deleteNestedValue(obj: any, path: string): void {
+    const keys = path.split('.')
+    const lastKey = keys.pop()!
+    const target = keys.reduce((current, key) => current?.[key], obj)
+    if (target && lastKey in target) {
+      delete target[lastKey]
+    }
   }
 }

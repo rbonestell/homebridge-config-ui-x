@@ -1,0 +1,109 @@
+{
+  "pluginAlias": "MockPluginWithSecrets",
+  "pluginType": "platform",
+  "singular": false,
+  "headerDisplay": "This is a mock plugin for testing secret field functionality.",
+  "footerDisplay": "Secret fields are automatically encrypted and stored securely.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Platform Name",
+        "type": "string",
+        "default": "MockPluginWithSecrets",
+        "required": true
+      },
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "secret": true,
+        "description": "Your secret API key (will be stored securely)"
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "description": "Regular username field (not secret)"
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "secret": true,
+        "description": "Your password (will be stored securely)"
+      },
+      "settings": {
+        "type": "object",
+        "title": "Settings",
+        "properties": {
+          "webhookSecret": {
+            "title": "Webhook Secret",
+            "type": "string",
+            "secret": true,
+            "description": "Webhook secret for API callbacks"
+          },
+          "timeout": {
+            "title": "Timeout (seconds)",
+            "type": "integer",
+            "default": 30,
+            "minimum": 1,
+            "maximum": 300
+          }
+        }
+      },
+      "devices": {
+        "type": "array",
+        "title": "Devices",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Device Name",
+              "type": "string"
+            },
+            "token": {
+              "title": "Device Token",
+              "type": "string",
+              "secret": true,
+              "description": "Secret device token"
+            }
+          }
+        }
+      }
+    }
+  },
+  "form": [
+    "name",
+    {
+      "key": "apiKey",
+      "type": "password",
+      "description": "This field is marked as secret and will be encrypted"
+    },
+    "username",
+    {
+      "key": "password",
+      "type": "password",
+      "description": "This field is marked as secret and will be encrypted"
+    },
+    {
+      "type": "fieldset",
+      "title": "Advanced Settings",
+      "expandable": true,
+      "items": [
+        "settings.webhookSecret",
+        "settings.timeout"
+      ]
+    },
+    {
+      "key": "devices",
+      "type": "array",
+      "title": "Devices",
+      "items": [
+        "devices[].name",
+        {
+          "key": "devices[].token",
+          "type": "password",
+          "description": "Secret device token (encrypted)"
+        }
+      ]
+    }
+  ]
+}

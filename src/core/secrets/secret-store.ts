@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { KeyChain } from "./keychain";
@@ -8,6 +9,8 @@ import { readJSONSync, writeJsonSync } from "fs-extra";
 export interface SecretsFileFormat {
   version: 1;
   data: Record<string, string>;
+  createdAt?: string;
+  lastModified?: string;
 }
 
 export class SecretStore {
@@ -104,23 +107,69 @@ export class SecretStore {
     }
 
     try {
-      this.secrets = readJSONSync(this.filePath, { encoding: "utf8" });
+      const fileContent = readJSONSync(this.filePath, { encoding: "utf8" });
+      
+      // Handle both new format with versioning and legacy format for backward compatibility
+      if (fileContent && typeof fileContent === 'object') {
+        if (fileContent.version === 1 && fileContent.data) {
+          // New format with SecretsFileFormat
+          this.secrets = fileContent.data;
+        } else if (!fileContent.version && !fileContent.data) {
+          // Legacy format - direct object with encrypted secrets
+          this.secrets = fileContent;
+        } else {
+          console.warn(`Unknown secrets file format version: ${fileContent.version}`);
+          this.secrets = {};
+        }
+      } else {
+        this.secrets = {};
+      }
     } catch (e: any) {
       console.error(`Failed to load secrets: ${e.message}`);
+      this.secrets = {};
     }
   }
 
   /**
-   * Save secrets to disk
+   * Save secrets to disk using proper SecretsFileFormat and atomic operations
    */
   private saveSecretsToDisk(): void {
+    const now = new Date().toISOString();
+    
+    // Create properly formatted secrets file
+    const secretsFile: SecretsFileFormat = {
+      version: 1,
+      data: this.secrets,
+      createdAt: now, // This will be overwritten on subsequent saves
+      lastModified: now,
+    };
+
+    // Use atomic file operations for safety
+    const tempFileName = `${path.basename(this.filePath)}.${randomUUID()}.tmp`;
+    const tempFilePath = path.resolve(path.dirname(this.filePath), tempFileName);
+
     try {
-      writeJsonSync(this.filePath, this.secrets, {
+      // Write to temporary file first
+      writeJsonSync(tempFilePath, secretsFile, {
         spaces: 2,
         encoding: "utf8",
       });
+
+      // Atomically rename to final destination
+      fs.renameSync(tempFilePath, this.filePath);
     } catch (e: any) {
       console.error(`Failed to save secrets: ${e.message}`);
+      
+      // Clean up temporary file if it exists
+      try {
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+        }
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
+      
+      throw e;
     }
   }
 
